@@ -27,6 +27,9 @@ func startServer() {
 }
 
 func main() {
+	// Вызываем функцию CreateDatabase из файла dbSetup.go
+	CreateDatabase()
+	// запуск сервера
 	startServer()
 	fmt.Println("Завершаем работу")
 }
