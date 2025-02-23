@@ -302,3 +302,116 @@ func ChangeTaskById(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonResponse)
 
 }
+
+// Напишите обработчик для POST-запроса /api/task/done, который делает задачу выполненной.
+// Для периодической задачи нужно рассчитать и поменять дату следующего выполнения.
+// Одноразовая задача с пустым полем repeat удаляется.
+// Идентификатор задачи передаётся в самом запросе /api/task/done?id=<идентификатор>.
+// В случае успешного удаления возвращается пустой JSON {}, а в случае ошибки, она должна быть указана в поле error.
+// Для расчёта следующей даты используйте функцию NextDate() из начала итогового задания. Самое главное, не забудьте изменить у задачи значение колонки date на новую дату.
+
+func WriteOK(w http.ResponseWriter) {
+	//В случае успешного изменения должен возвращаться пустой JSON {}
+	// Объявление пустой карты
+	responseOk := make(map[string]interface{})
+
+	// сериализуем в JSON данные в тело ответа
+	jsonResponse, err := json.Marshal(responseOk)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка при преобразовании в JSON:", err)
+		return
+	}
+
+	// записываем сериализованные в JSON данные в тело ответа
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonResponse)
+}
+
+func TaskDone(w http.ResponseWriter, r *http.Request) {
+
+	// считываем идентификатор
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		WriteErrorJSON(w, "Не указан идентификатор!", nil)
+		return
+	}
+
+	// проверяем идентификатор, что он состоит из цифр
+	_, err := strconv.ParseInt(id, 10, 32)
+	if err != nil {
+		WriteErrorJSON(w, "Не верный формат идентификатора", err)
+		return
+	}
+
+	//считываем задачу
+	task, s, err := GetTaskById(id)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	// Одноразовая задача с пустым полем repeat удаляется.
+	if task.Repeat == "" {
+		_, err = DeleteTaskById(id)
+		if err != nil {
+			WriteErrorJSON(w, s, err)
+			return
+		}
+		WriteOK(w)
+		return
+	}
+
+	// Для расчёта следующей даты используйте функцию NextDate() из начала итогового задания. Самое главное, не забудьте изменить у задачи значение колонки date на новую дату.
+	date, err := NextDate(time.Now(), task.Date, task.Repeat)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка при получении NextDate: ", err)
+		return
+	}
+
+	//Обновляем данные в базе
+	s, err = UpdateTaskInDb(id, date, task.Title, task.Comment, task.Repeat)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+	WriteOK(w)
+}
+
+// Удаление задачи
+// Бывают ситуации, когда задача потеряла актуальность и её нужно просто удалить.
+// На фронтенде в браузере для этого есть иконка в виде корзины. Добавьте в хендлер /api/task обработку запроса с методом DELETE - /api/task/done?id=<идентификатор>.
+// В этом случае нужно удалить из таблицы scheduler задачу с указанным идентификатором.
+// Ответ сервера должен быть аналогичен ответу на запрос /api/task/done. Нужно возвращать {} или, в случае ошибки, JSON с полем error.
+// Проверьте функцию удаления задач, как обычно, с помощью тестов go test -run ^TestDelTask$ ./tests, а затем в браузере.
+func DeleteTask(w http.ResponseWriter, r *http.Request) {
+
+	// считываем идентификатор
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		WriteErrorJSON(w, "Не указан идентификатор!", nil)
+		return
+	}
+
+	// проверяем идентификатор, что он состоит из цифр
+	_, err := strconv.ParseInt(id, 10, 32)
+	if err != nil {
+		WriteErrorJSON(w, "Не верный формат идентификатора", err)
+		return
+	}
+
+	//проверяем задачу на наличие
+	_, s, err := GetTaskById(id)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	_, err = DeleteTaskById(id)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	WriteOK(w)
+}

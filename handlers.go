@@ -67,9 +67,16 @@ func HandleTask(w http.ResponseWriter, req *http.Request) {
 		FindTaskById(w, req)
 	case req.Method == "PUT":
 		ChangeTaskById(w, req)
+	case req.Method == "DELETE":
+		DeleteTask(w, req)
 	}
+
 }
 
 func HandleAllTasks(w http.ResponseWriter, req *http.Request) {
 	FindTasks(w, req)
+}
+
+func HandleTaskDone(w http.ResponseWriter, req *http.Request) {
+	TaskDone(w, req)
 }

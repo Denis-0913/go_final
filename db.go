@@ -195,3 +195,15 @@ func UpdateTaskInDb(id string, date string, title string, comment string, repeat
 
 	return "", nil
 }
+
+// Удаляем задачу по id
+func DeleteTaskById(id string) (string, error) {
+
+	sqlStmt := `DELETE FROM scheduler WHERE id = ?`
+	_, err := dbConnect.Exec(sqlStmt, id)
+	if err != nil {
+		return ("Ошибка при обновлении задачи " + id), err
+	}
+
+	return "", nil
+}

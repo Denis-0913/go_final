@@ -26,6 +26,8 @@ func startServer() {
 	// правила повторения задач
 	http.HandleFunc("/api/nextdate", HandleNextDate)
 
+	http.HandleFunc("/api/task/done", HandleTaskDone)
+
 	http.HandleFunc("/api/task", HandleTask)
 
 	http.HandleFunc("/api/tasks", HandleAllTasks)
