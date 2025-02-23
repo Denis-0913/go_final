@@ -26,6 +26,8 @@ func startServer() {
 	// правила повторения задач
 	http.HandleFunc("/api/nextdate", HandleNextDate)
 
+	http.HandleFunc("/api/task", HandleTask)
+
 	// запуск сервера
 	fmt.Println("Запускаем сервер c портом: " + port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

@@ -11,8 +11,10 @@ import (
 	_ "github.com/mattn/go-sqlite3" // в тесте проверяет дравйвер sqlite3 !!! в задании об этом ни слова
 )
 
+var db *sql.DB
+
 // проверяем есть ли база данных, код из задания
-func checkDB() bool {
+func checkDB() (bool, string) {
 
 	//// Получаем путь к исполняемому файлу приложения
 	//appPath, err := os.Executable()
@@ -43,23 +45,25 @@ func checkDB() bool {
 
 	// Проверяем, существует ли файл базы данных
 	if err == nil {
-		return true // файл сушеществует
+		return true, dbFile // файл сушеществует
 	}
-	return false // файла нет
+	return false, dbFile // файла нет
 }
 
 // Создаем BD и таблицу если ее нет
 // функция с большой буквы, что бы ее можно было вызвать в других файлах данного пакета
 func CreateDatabase() {
 
+	checkDB, dbFile := checkDB()
+
 	// Устанавливаем соединение с базой данных SQLite
-	db, err := sql.Open("sqlite3", "scheduler.db")
+	db, err := sql.Open("sqlite3", dbFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	if checkDB() {
+	if checkDB {
 		fmt.Println("База данных уже существует.")
 	} else {
 		// Создаем таблицу scheduler
@@ -89,4 +93,31 @@ func CreateDatabase() {
 
 		fmt.Println("Таблица и индекс созданы успешно!")
 	}
+}
+
+// вставка задачи
+func InsertTask(date string, title string, comment string, repeat string) (id int, s string, err error) {
+
+	// Устанавливаем соединение с базой данных SQLite
+	// при попытке ее не закрывать в CreateDatabase() и тут не переоткрывать доступа к БД нет, хотя она и идет как переменная (даже если убираю defer db.Close())
+	_, dbFile := checkDB()
+	db, err := sql.Open("sqlite3", dbFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)`
+	res, err := db.Exec(query, date, title, comment, repeat)
+	if err != nil {
+		return -1, "Ошибка вставки Task в БД", err
+	}
+
+	//Обработчик должен возвращать JSON с полем id или error
+	lastInsertId, err := res.LastInsertId()
+	if err != nil {
+		return -1, "Ошибка получения id вставки", err
+	}
+
+	return int(lastInsertId), "", nil
 }
