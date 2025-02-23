@@ -6,6 +6,11 @@ import (
 	"os"
 )
 
+// константа для формата даты
+const (
+	DateFormat = "20060102"
+)
+
 // Зупуск сервера
 func startServer() {
 	// Определение порта из переменной окружения или по умолчанию 7540
@@ -17,6 +22,9 @@ func startServer() {
 	// Настройка файлового сервера для директории ./web
 	webDir := "web"
 	http.Handle("/", http.FileServer(http.Dir(webDir)))
+
+	// правила повторения задач
+	http.HandleFunc("/api/nextdate", HandleNextDate)
 
 	// запуск сервера
 	fmt.Println("Запускаем сервер c портом: " + port)
