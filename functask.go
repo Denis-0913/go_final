@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -141,7 +142,7 @@ func AddTask(w http.ResponseWriter, r *http.Request) {
 func FindTasks(w http.ResponseWriter, r *http.Request) {
 
 	//считываем 50 строк отсортированных по возрастанию даты
-	tasks, s, err := SelectTask()
+	tasks, s, err := SelectTasks()
 	if err != nil {
 		WriteErrorJSON(w, s, err)
 		return
@@ -160,4 +161,144 @@ func FindTasks(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
+}
+
+//реализуйте обработчик GET-запроса /api/task?id=<идентификатор>. Запрос должен возвращать JSON-объект со всеми полями задачи.
+
+func FindTaskById(w http.ResponseWriter, r *http.Request) {
+
+	// считываем идентификатор
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		WriteErrorJSON(w, "Не указан идентификатор!", nil)
+		return
+	}
+
+	// проверяем идентификатор, что он состоит из цифр
+	_, err := strconv.ParseInt(id, 10, 32)
+	if err != nil {
+		WriteErrorJSON(w, "Не верный формат идентификатора", err)
+		return
+	}
+
+	//считываем задачу
+	task, s, err := GetTaskById(id)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	jsonData, err := json.Marshal(task)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка преобразования задач в JSON: ", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+//реализуйте обработчик PUT-запроса /api/task
+// Если пользователь изменит какое-либо значение, в диалоговом окне появится кнопка Сохранить. П
+// ри нажатии на неё фронтенд отправляет значение всех полей методом PUT по адресу /api/task.
+// Данные передаются в виде JSON-объекта, как при добавлении задачи, но с полем id:
+// Добавьте обработку PUT-запроса в хендлер для /api/task.
+// При этом данные нужно проверять так же, как при добавлении задачи.
+// В случае успешного изменения должен возвращаться пустой JSON {}, а в случае ошибки, она записывается в поле error.
+
+func ChangeTaskById(w http.ResponseWriter, r *http.Request) {
+
+	// При этом данные нужно проверять так же, как при добавлении задачи.
+	//Чтение данных из тела запроса r.Body в буфер buf
+	var buf bytes.Buffer
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка чтения из тела запроса r.Body в буфер buf", err)
+		return
+	}
+
+	//десериализуем данные из буфера buf в структуру Tasks.
+	var task TasksDB
+	if err = json.Unmarshal(buf.Bytes(), &task); err != nil {
+		WriteErrorJSON(w, "Ошибка десериализации JSON", err)
+		return
+	}
+
+	//Поле title обязательное
+	if task.Title == "" {
+		WriteErrorJSON(w, "не указан заголовок задачи", err)
+		return
+	}
+
+	//Поле id обязательное
+	if task.ID == "" {
+		WriteErrorJSON(w, "не указан идентификатор задачи", err)
+		return
+	}
+
+	// проверяем идентификатор, что он состоит из цифр
+	_, err = strconv.ParseInt(task.ID, 10, 32)
+	if err != nil {
+		WriteErrorJSON(w, "Не верный формат идентификатора", err)
+		return
+	}
+
+	//Если поле date не указано или содержит пустую строку, берётся сегодняшнее число.
+	now := time.Now()
+	nowStr := now.Format(DateFormat)
+	if task.Date == "" {
+		task.Date = nowStr
+	}
+
+	// Еще обязательно проверьте, что дата указана в формате 20060102 и что функция time.Parse() корректно её распознаёт.
+	date, err := time.Parse(DateFormat, task.Date)
+	if err != nil {
+		WriteErrorJSON(w, "дата представлена в формате, отличном от 20060102", err)
+		return
+	}
+
+	dateStr := date.Format(DateFormat) // понадобится ниже
+
+	//Если дата меньше сегодняшнего числа, есть два варианта:
+	//1) если правило повторения не указано или равно пустой строке, подставляется сегодняшнее число;
+	//2) при указанном правиле повторения вам нужно вычислить и записать в таблицу дату выполнения,
+	// которая будет больше сегодняшнего числа. Для этого используйте функцию NextDate(), которую вы уже написали раньше.
+
+	if dateStr < nowStr {
+		if task.Repeat == "" {
+			task.Date = nowStr
+		} else {
+			nextDate, err := NextDate(now, task.Date, task.Repeat)
+			if err != nil {
+				WriteErrorJSON(w, "Ошибка NextDate: ", err) //правило повторения указано в неправильном формате в том чисде
+				return
+			}
+			task.Date = nextDate
+		}
+	}
+
+	//Обновляем данные в базе
+	s, err := UpdateTaskInDb(task.ID, task.Date, task.Title, task.Comment, task.Repeat)
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	//В случае успешного изменения должен возвращаться пустой JSON {}
+	// Объявление пустой карты
+	responseOk := make(map[string]interface{})
+
+	// сериализуем в JSON данные в тело ответа
+	jsonResponse, err := json.Marshal(responseOk)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка при преобразовании в JSON:", err)
+		return
+	}
+
+	// записываем сериализованные в JSON данные в тело ответа
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonResponse)
+
 }

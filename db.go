@@ -142,7 +142,7 @@ func InsertTask(date string, title string, comment string, repeat string) (id in
 }
 
 // считываем 50 задач отсортировав по возрастанию
-func SelectTask() ([]TasksDB, string, error) {
+func SelectTasks() ([]TasksDB, string, error) {
 
 	var tasks []TasksDB
 
@@ -158,4 +158,40 @@ func SelectTask() ([]TasksDB, string, error) {
 	}
 
 	return tasks, "", nil
+}
+
+// находим задачу по id
+func GetTaskById(id string) (*TasksDB, string, error) {
+
+	var task TasksDB
+
+	// считываем 50 задач отсортировав по возрастанию
+	err := dbConnect.Get(&task, "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id)
+	if err != nil {
+		return nil, "Ошибка чтения Task из БД", err
+	}
+
+	if &task == nil {
+		return nil, "Задача не найдена", err
+	}
+
+	return &task, "", nil
+}
+
+// находим задачу по id
+// Если пользователь изменит какое-либо значение, в диалоговом окне появится кнопка Сохранить.
+// При нажатии на неё фронтенд отправляет значение всех полей методом PUT по адресу /api/task.
+// анные передаются в виде JSON-объекта, как при добавлении задачи, но с полем id:
+func UpdateTaskInDb(id string, date string, title string, comment string, repeat string) (string, error) {
+
+	sqlStmt := `
+	UPDATE scheduler
+	SET date = ?, title = ?, comment = ?, repeat = ? 
+	WHERE id = ?`
+	_, err := dbConnect.Exec(sqlStmt, date, title, comment, repeat, id)
+	if err != nil {
+		return ("Ошибка при обновлении задачи " + id), err
+	}
+
+	return "", nil
 }
