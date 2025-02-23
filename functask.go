@@ -126,7 +126,38 @@ func AddTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// записываем сериализованные в JSON данные в тело ответа
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonResponse)
+}
+
+// AddTask Обработчик для добавления задачи
+
+// нужно реализовать обработчик для GET-запроса /api/tasks.
+// Он должен возвращать список ближайших задач в формате JSON в виде списка в поле tasks.
+// Задачи должны быть отсортированы по дате в сторону увеличения.
+// Каждая задача должна содержать все поля таблицы scheduler в виде строк.
+// Дата представлена в уже знакомом вам формате 20060102.
+func FindTasks(w http.ResponseWriter, r *http.Request) {
+
+	//считываем 50 строк отсортированных по возрастанию даты
+	tasks, s, err := SelectTask()
+	if err != nil {
+		WriteErrorJSON(w, s, err)
+		return
+	}
+
+	response := map[string]interface{}{
+		"tasks": tasks,
+	}
+
+	jsonData, err := json.Marshal(response)
+	if err != nil {
+		WriteErrorJSON(w, "Ошибка преобразования задач в JSON: ", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
 }

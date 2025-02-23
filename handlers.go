@@ -63,5 +63,11 @@ func HandleTask(w http.ResponseWriter, req *http.Request) {
 	switch {
 	case req.Method == "POST":
 		AddTask(w, req)
+		//case req.Method == "GET":
+		//	FindTask(w, req)
 	}
+}
+
+func HandleAllTasks(w http.ResponseWriter, req *http.Request) {
+	FindTasks(w, req)
 }

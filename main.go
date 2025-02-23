@@ -28,6 +28,8 @@ func startServer() {
 
 	http.HandleFunc("/api/task", HandleTask)
 
+	http.HandleFunc("/api/tasks", HandleAllTasks)
+
 	// запуск сервера
 	fmt.Println("Запускаем сервер c портом: " + port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {

@@ -7,11 +7,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/jmoiron/sqlx"
+
 	//_ "modernc.org/sqlite"
 	_ "github.com/mattn/go-sqlite3" // в тесте проверяет дравйвер sqlite3 !!! в задании об этом ни слова
 )
 
+// Создаем отдельно, что бы все поля были строго обязательными
+type TasksDB struct {
+	ID      string `db:"id" json:"id"`
+	Date    string `db:"date" json:"date"`
+	Title   string `db:"title" json:"title"`
+	Comment string `db:"comment" json:"comment"`
+	Repeat  string `db:"repeat" json:"repeat"`
+}
+
 var db *sql.DB
+
+var dbConnect *sqlx.DB //у меня на локале соединение разрывалось при соединении с github.com/mattn/go-sqlite3, корректно работает с github.com/jmoiron/sqlx
 
 // проверяем есть ли база данных, код из задания
 func checkDB() (bool, string) {
@@ -63,6 +76,12 @@ func CreateDatabase() {
 	}
 	defer db.Close()
 
+	dbConnect, err = sqlx.Connect("sqlite3", dbFile)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
 	if checkDB {
 		fmt.Println("База данных уже существует.")
 	} else {
@@ -100,15 +119,15 @@ func InsertTask(date string, title string, comment string, repeat string) (id in
 
 	// Устанавливаем соединение с базой данных SQLite
 	// при попытке ее не закрывать в CreateDatabase() и тут не переоткрывать доступа к БД нет, хотя она и идет как переменная (даже если убираю defer db.Close())
-	_, dbFile := checkDB()
-	db, err := sql.Open("sqlite3", dbFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+	//_, dbFile := checkDB()
+	//db, err := sql.Open("sqlite3", dbFile)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//defer db.Close()
 
 	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)`
-	res, err := db.Exec(query, date, title, comment, repeat)
+	res, err := dbConnect.Exec(query, date, title, comment, repeat)
 	if err != nil {
 		return -1, "Ошибка вставки Task в БД", err
 	}
@@ -120,4 +139,23 @@ func InsertTask(date string, title string, comment string, repeat string) (id in
 	}
 
 	return int(lastInsertId), "", nil
+}
+
+// считываем 50 задач отсортировав по возрастанию
+func SelectTask() ([]TasksDB, string, error) {
+
+	var tasks []TasksDB
+
+	// считываем 50 задач отсортировав по возрастанию
+	err := dbConnect.Select(&tasks, "SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT 50")
+	if err != nil {
+		return nil, "Ошибка чтения Task из БД", err
+	}
+
+	//если строк нет вообще
+	if tasks == nil {
+		tasks = []TasksDB{}
+	}
+
+	return tasks, "", nil
 }
