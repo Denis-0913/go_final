@@ -8,55 +8,50 @@ import (
 	"path/filepath"
 
 	"github.com/jmoiron/sqlx"
-
-	//_ "modernc.org/sqlite"
-	_ "github.com/mattn/go-sqlite3" // в тесте проверяет дравйвер sqlite3 !!! в задании об этом ни слова
+	_ "modernc.org/sqlite"
 )
 
-// Создаем отдельно, что бы все поля были строго обязательными
-type TasksDB struct {
-	ID      string `db:"id" json:"id"`
-	Date    string `db:"date" json:"date"`
-	Title   string `db:"title" json:"title"`
-	Comment string `db:"comment" json:"comment"`
-	Repeat  string `db:"repeat" json:"repeat"`
+type Database struct {
+	DBConnect *sqlx.DB
 }
 
-var db *sql.DB
+func newDBConnect(db *sqlx.DB) Database {
+	return Database{DBConnect: db}
+}
 
-var dbConnect *sqlx.DB //у меня на локале соединение разрывалось при соединении с github.com/mattn/go-sqlite3, корректно работает с github.com/jmoiron/sqlx
+// NewDatabase создает новое подключение к базе данных
+func newConnection() (*Database, error) {
+
+	_, dbFile := checkDB()
+
+	db, err := sqlx.Connect("sqlite", dbFile)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	// Возвращаем структуру подключения
+	return &Database{DBConnect: db}, nil
+}
+
+func (d *Database) Close() error {
+	return d.DBConnect.Close()
+}
 
 // проверяем есть ли база данных, код из задания
 func checkDB() (bool, string) {
 
-	//// Получаем путь к исполняемому файлу приложения
-	//appPath, err := os.Executable()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//// Определяем путь к файлу базы данных
-	//dbFile := filepath.Join(filepath.Dir(appPath), "scheduler.db")
-	//_, err = os.Stat(dbFile)
-	// Получаем текущую рабочую директорию
-
-	// код выше закоменчанный был дан в задании и он показывает путь некорректно
-	// исправления переменных окружения на моем компьютере недоступно, поэтому
-	// так как в условии сказано что БД должна лежать в деректории, файл внутри дериктории и буду определять
-
 	//Реализуйте возможность определять путь к файлу базы данных через переменную окружения.
 	//Для этого сервер должен получать значение переменной окружения TODO_DBFILE
 	//и использовать его в качестве пути к базе данных, если это не пустая строка.
-
-	currentDir := os.Getenv("TODO_DBFILE")
-	if currentDir == "" {
-		currentDir, _ = os.Getwd()
+	dbFile := os.Getenv("TODO_DBFILE")
+	if dbFile == "" {
+		dbFile, _ = os.Getwd()
+		dbFile = filepath.Join(dbFile, "scheduler.db")
 	}
 
-	dbFile := filepath.Join(currentDir, "scheduler.db")
-	_, err := os.Stat(dbFile)
-
 	// Проверяем, существует ли файл базы данных
+	_, err := os.Stat(dbFile)
 	if err == nil {
 		return true, dbFile // файл сушеществует
 	}
@@ -65,22 +60,16 @@ func checkDB() (bool, string) {
 
 // Создаем BD и таблицу если ее нет
 // функция с большой буквы, что бы ее можно было вызвать в других файлах данного пакета
-func CreateDatabase() {
+func createDatabase() {
 
 	checkDB, dbFile := checkDB()
 
 	// Устанавливаем соединение с базой данных SQLite
-	db, err := sql.Open("sqlite3", dbFile)
+	db, err := sql.Open("sqlite", dbFile)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
-
-	dbConnect, err = sqlx.Connect("sqlite3", dbFile)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
 
 	if checkDB {
 		fmt.Println("База данных уже существует.")
@@ -115,7 +104,7 @@ func CreateDatabase() {
 }
 
 // вставка задачи
-func InsertTask(date string, title string, comment string, repeat string) (id int, s string, err error) {
+func (d *Database) insertTask(date string, title string, comment string, repeat string) (id int, s string, err error) {
 
 	// Устанавливаем соединение с базой данных SQLite
 	// при попытке ее не закрывать в CreateDatabase() и тут не переоткрывать доступа к БД нет, хотя она и идет как переменная (даже если убираю defer db.Close())
@@ -127,7 +116,7 @@ func InsertTask(date string, title string, comment string, repeat string) (id in
 	//defer db.Close()
 
 	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)`
-	res, err := dbConnect.Exec(query, date, title, comment, repeat)
+	res, err := d.DBConnect.Exec(query, date, title, comment, repeat)
 	if err != nil {
 		return -1, "Ошибка вставки Task в БД", err
 	}
@@ -142,31 +131,31 @@ func InsertTask(date string, title string, comment string, repeat string) (id in
 }
 
 // считываем 50 задач отсортировав по возрастанию
-func SelectTasks() ([]TasksDB, string, error) {
+func (d *Database) selectTasks() ([]Tasks, string, error) {
 
-	var tasks []TasksDB
+	var tasks []Tasks
 
 	// считываем 50 задач отсортировав по возрастанию
-	err := dbConnect.Select(&tasks, "SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT 50")
+	err := d.DBConnect.Select(&tasks, "SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date ASC LIMIT ?", LimitTask)
 	if err != nil {
 		return nil, "Ошибка чтения Task из БД", err
 	}
 
 	//если строк нет вообще
 	if tasks == nil {
-		tasks = []TasksDB{}
+		tasks = []Tasks{}
 	}
 
 	return tasks, "", nil
 }
 
 // находим задачу по id
-func GetTaskById(id string) (*TasksDB, string, error) {
+func (d *Database) getTaskById(id string) (*Tasks, string, error) {
 
-	var task TasksDB
+	var task Tasks
 
 	// считываем 50 задач отсортировав по возрастанию
-	err := dbConnect.Get(&task, "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id)
+	err := d.DBConnect.Get(&task, "SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id)
 	if err != nil {
 		return nil, "Ошибка чтения Task из БД", err
 	}
@@ -182,13 +171,13 @@ func GetTaskById(id string) (*TasksDB, string, error) {
 // Если пользователь изменит какое-либо значение, в диалоговом окне появится кнопка Сохранить.
 // При нажатии на неё фронтенд отправляет значение всех полей методом PUT по адресу /api/task.
 // анные передаются в виде JSON-объекта, как при добавлении задачи, но с полем id:
-func UpdateTaskInDb(id string, date string, title string, comment string, repeat string) (string, error) {
+func (d *Database) updateTaskInDb(id string, date string, title string, comment string, repeat string) (string, error) {
 
 	sqlStmt := `
 	UPDATE scheduler
 	SET date = ?, title = ?, comment = ?, repeat = ? 
 	WHERE id = ?`
-	_, err := dbConnect.Exec(sqlStmt, date, title, comment, repeat, id)
+	_, err := d.DBConnect.Exec(sqlStmt, date, title, comment, repeat, id)
 	if err != nil {
 		return ("Ошибка при обновлении задачи " + id), err
 	}
@@ -197,10 +186,10 @@ func UpdateTaskInDb(id string, date string, title string, comment string, repeat
 }
 
 // Удаляем задачу по id
-func DeleteTaskById(id string) (string, error) {
+func (d *Database) deleteTaskById(id string) (string, error) {
 
 	sqlStmt := `DELETE FROM scheduler WHERE id = ?`
-	_, err := dbConnect.Exec(sqlStmt, id)
+	_, err := d.DBConnect.Exec(sqlStmt, id)
 	if err != nil {
 		return ("Ошибка при обновлении задачи " + id), err
 	}
